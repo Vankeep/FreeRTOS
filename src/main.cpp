@@ -12,12 +12,11 @@ void blinkTask(void *pvParameters) {
     vTaskDelay(1000 / portTICK_PERIOD_MS);  // Задержка 1 секунда
   }
 }
-
 void setup() {
   pinMode(LED, OUTPUT);  // Настроить пин LED как выход
-  
+
   // Создать задачу FreeRTOS
-  xTaskCreate(
+  BaseType_t result = xTaskCreate(
     blinkTask,          // Функция задачи
     "Blink",            // Имя задачи (для отладки)
     128,                // Размер стека (в словах)
@@ -25,11 +24,18 @@ void setup() {
     1,                  // Приоритет (1 - нормальный)
     NULL                // Хэндл задачи (не используется)
   );
-  
+
+  // Проверка успешности создания задачи
+  // pdPASS (обычно 1) — успешное выполнение
+  // pdFAIL (обычно 0) — ошибка
+  // errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY — ошибка выделения памяти
+  if (result != pdPASS) {
+    // Если задача не создана, можно обработать ошибку (например, включить LED или вывести сообщение)
+  }
+
   // Запустить планировщик FreeRTOS
   vTaskStartScheduler();
 }
-
 void loop() {
   // Пустой цикл: все действия в задачах FreeRTOS
 }
