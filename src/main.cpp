@@ -3,23 +3,31 @@
 
 #define LED PC13
 
+HardwareSerial uartPort(PA10, PA9);
+
 // Функция задачи для мигания LED
 void blinkTask(void *pvParameters) {
+  
+  pinMode(LED, OUTPUT);  // Настроить пин LED как выход
+
   for (;;) {
     digitalWrite(LED, HIGH);  // Включить LED
+    uartPort.println("LED on");
     vTaskDelay(1000 / portTICK_PERIOD_MS);  // Задержка 1 секунда
     digitalWrite(LED, LOW);   // Выключить LED
+    uartPort.println("LED off");
     vTaskDelay(1000 / portTICK_PERIOD_MS);  // Задержка 1 секунда
   }
 }
 void setup() {
-  pinMode(LED, OUTPUT);  // Настроить пин LED как выход
+  uartPort.begin(115200); // Инициализация UART
+  uartPort.println("Starting FreeRTOS Blink Task");
 
   // Создать задачу FreeRTOS
   BaseType_t result = xTaskCreate(
     blinkTask,          // Функция задачи
     "Blink",            // Имя задачи (для отладки)
-    128,                // Размер стека (в словах)
+    256,                // Размер стека (в словах)
     NULL,               // Параметры (не используются)
     1,                  // Приоритет (1 - нормальный)
     NULL                // Хэндл задачи (не используется)
