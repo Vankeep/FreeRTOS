@@ -1,140 +1,110 @@
 #include <Arduino.h>
 #include <STM32FreeRTOS.h>
 
-// Пины светодиодов
-const uint8_t LED1_PIN = PA6;
-const uint8_t LED2_PIN = PA4;
-const uint8_t LED3_PIN = PA5;
-
-// ==================== ТИПЫ ДАННЫХ ====================
-enum LedCommand {
-  LED1_ON,    // Включить светодиод 1
-  LED2_ON,    // Включить светодиод 2
-  LED3_ON,    // Включить светодиод 3
-  ALL_OFF,    // Выключить все светодиоды
-  INVALID_CMD // Неверная команда
-};
+// Дескрипторы задач для отслеживания
+TaskHandle_t task1Handle = NULL;
+TaskHandle_t task2Handle = NULL;
 
 HardwareSerial uartPort(PA10, PA9);
-QueueHandle_t ledCommandQueue;
 
-// ==================== ЗАДАЧИ FREE_RTOS ====================
-void uartSenderTask(void *pvParameters) {
-  const int MAX_BUFFER_SIZE = 32; // Максимальный размер буфера для принимаемой строки
-  char buffer[MAX_BUFFER_SIZE];   // Буфер для принимаемой строки
-  int bufferIndex = 0;            // Индекс в буфере
-  
+// Задача 1 - с большим стеком
+void task1(void *pvParameters) {
   while (1) {
-    if (uartPort.available()) {
-      char input = uartPort.read();
-      
-      // Если получен символ новой строки или возврата каретки, обрабатываем команду
-      if (input == '\n' || input == '\r') {
-        // Завершаем строку
-        buffer[bufferIndex] = '\0';
-        
-        LedCommand command = LedCommand::INVALID_CMD;
-        if(strcmp(buffer, "один") == 0) command = LedCommand::LED1_ON;
-        else if(strcmp(buffer, "два") == 0) command = LedCommand::LED2_ON;
-        else if(strcmp(buffer, "три") == 0) command = LedCommand::LED3_ON;
-        else if(strcmp(buffer, "выкл") == 0) command = LedCommand::ALL_OFF;
-        
-        BaseType_t queueStatus = xQueueSend(ledCommandQueue, &command, portMAX_DELAY);
-        
-        // Сбрасываем индекс буфера для следующей команды
-        bufferIndex = 0;
-      } 
-      // Если буфер не заполнен и получен обычный символ, добавляем его в буфер
-      else if (bufferIndex < MAX_BUFFER_SIZE - 1) {
-        buffer[bufferIndex++] = input;
-      }
+    // Имитация работы с использованием стека
+    volatile uint32_t temp[20];
+    for (int i = 0; i < 20; i++) {
+      temp[i] = i * 100;
     }
-    vTaskDelay(pdMS_TO_TICKS(10)); // Уменьшим задержку для более быстрой реакции
+    
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
-void ledControllerTask(void *pvParameters) {
-  LedCommand receivedCommand;
-  
+// Задача 2 - с маленьким стеком
+void task2(void *pvParameters) {
   while (1) {
-    if (xQueueReceive(ledCommandQueue, &receivedCommand, portMAX_DELAY) == pdPASS) {
-      // Выключаем все светодиоды перед выполнением команды
-      digitalWrite(LED1_PIN, HIGH);
-      digitalWrite(LED2_PIN, HIGH);
-      digitalWrite(LED3_PIN, HIGH);
-  
-      switch (receivedCommand) {
-        case LED1_ON:
-          digitalWrite(LED1_PIN, LOW);
-          uartPort.println("LED1 activated");
-          break;
-        case LED2_ON:
-          digitalWrite(LED2_PIN, LOW);
-          uartPort.println("LED2 activated");
-          break;
-        case LED3_ON:
-          digitalWrite(LED3_PIN, LOW);
-          uartPort.println("LED3 activated");
-          break;
-        case ALL_OFF:
-          uartPort.println("All LEDs deactivated");
-          break;
-        case INVALID_CMD:
-          uartPort.println("Error: Invalid command received");
-          // Индикация ошибки - быстрое мигание всеми светодиодами
-          for (uint8_t i = 0; i < 3; i++){
-            digitalWrite(LED1_PIN, LOW);
-            digitalWrite(LED2_PIN, HIGH);
-            digitalWrite(LED3_PIN, HIGH);
-            vTaskDelay(pdMS_TO_TICKS(50));
-            digitalWrite(LED1_PIN, HIGH);
-            digitalWrite(LED2_PIN, LOW);
-            digitalWrite(LED3_PIN, HIGH);
-            vTaskDelay(pdMS_TO_TICKS(50));
-            digitalWrite(LED1_PIN, HIGH);
-            digitalWrite(LED2_PIN, HIGH);
-            digitalWrite(LED3_PIN, LOW);
-            vTaskDelay(pdMS_TO_TICKS(50));
-          }
-          digitalWrite(LED1_PIN, HIGH);
-          digitalWrite(LED2_PIN, HIGH);
-          digitalWrite(LED3_PIN, HIGH);
-          break;
-      }
+    // Имитация работы с минимальным использованием стека
+    volatile uint32_t temp = 0;
+    temp++;
+    
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+}
+
+// Задача мониторинга памяти
+void monitorTask(void *pvParameters) {
+  while (1) {
+    uartPort.println("\n--- Memory Usage Report ---");
+    
+    // Информация о задаче 1
+    if (task1Handle != NULL) {
+      UBaseType_t stack1 = uxTaskGetStackHighWaterMark(task1Handle);
+      uartPort.print("Task 1 Stack: ");
+      uartPort.print(stack1 * sizeof(StackType_t));
+      uartPort.print(" bytes free (");
+      uartPort.print((float)stack1 / (1024 / sizeof(StackType_t)), 2);
+      uartPort.println("KB)");
     }
+    
+    // Информация о задаче 2
+    if (task2Handle != NULL) {
+      UBaseType_t stack2 = uxTaskGetStackHighWaterMark(task2Handle);
+      uartPort.print("Task 2 Stack: ");
+      uartPort.print(stack2 * sizeof(StackType_t));
+      uartPort.print(" bytes free (");
+      uartPort.print((float)stack2 / (1024 / sizeof(StackType_t)), 2);
+      uartPort.println("KB)");
+    }
+    
+    // Информация о куче FreeRTOS
+    size_t heapFree = xPortGetFreeHeapSize();
+    uartPort.print("FreeRTOS Heap: ");
+    uartPort.print(heapFree);
+    uartPort.println(" bytes free");
+    
+    vTaskDelay(pdMS_TO_TICKS(5000));
   }
 }
 
 void setup() {
-  pinMode(LED1_PIN, OUTPUT);
-  pinMode(LED2_PIN, OUTPUT);
-  pinMode(LED3_PIN, OUTPUT);
+  uartPort.begin(115200);
+  while (!uartPort);
   
-  // Выключаем все светодиоды (HIGH = выключено для данной схемы)
-  digitalWrite(LED1_PIN, HIGH);
-  digitalWrite(LED2_PIN, HIGH);
-  digitalWrite(LED3_PIN, HIGH);
+  uartPort.println("FreeRTOS Memory Monitor Demo");
+  uartPort.println("----------------------------");
   
-  uartPort.begin(9600);
-  uartPort.println("LED Control System Started");
-  uartPort.println("Send '1', '2' or '3' to control LEDs");
-  uartPort.println("Invalid commands will trigger error indication");
+  // Создаем задачи с разными размерами стека
+  xTaskCreate(
+    task1,             // Функция задачи
+    "Task1",           // Имя задачи
+    1024,              // Размер стека (в словах)
+    NULL,              // Параметры
+    1,                 // Приоритет
+    &task1Handle       // Дескриптор задачи
+  );
   
-  ledCommandQueue = xQueueCreate(5, sizeof(LedCommand));
+  xTaskCreate(
+    task2,             // Функция задачи
+    "Task2",           // Имя задачи
+    128,               // Размер стека (в словах)
+    NULL,              // Параметры
+    1,                 // Приоритет
+    &task2Handle       // Дескриптор задачи
+  );
   
-  if (ledCommandQueue != NULL) {
-    xTaskCreate(uartSenderTask, "UART Sender", 128, NULL, 1, NULL);
-    xTaskCreate(ledControllerTask, "LED Controller", 128, NULL, 1, NULL);
-    
-    vTaskStartScheduler();
-  } else {
-    
-    // Индикация ошибки - ledCommandQueue не инициализировалась
-    while (1) {
-      uartPort.println("Error: Failed to create command queue!");
-      delay(1000);
-    }
-  }
+  // Задача мониторинга
+  xTaskCreate(
+    monitorTask,
+    "Monitor",
+    512,
+    NULL,
+    2,                 // Более высокий приоритет
+    NULL
+  );
+  
+  vTaskStartScheduler();
 }
 
-void loop() {}
+void loop() {
+  // Пустой цикл - управление передано FreeRTOS
+}
