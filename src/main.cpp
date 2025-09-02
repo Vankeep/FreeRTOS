@@ -5,53 +5,61 @@
 
 HardwareSerial uartPort(PA10, PA9);
 
-SemaphoreHandle_t xMutex;
+// Дескриптор (указатель) бинарного семафора - будет создан в setup()
+SemaphoreHandle_t xBibarySemaphore;
 
-// Задача 1: отправка каждые 300 msec
-void xTask1(void *pvParam){
+
+// Две задачи, обменивающиеся данными через семафор
+// Задача-отправитель (активируется по Serial)
+void vSenderTask(void *pdParam){
   while (1){
-    // Захватываем мьютекс xSemaphoreTake. portMAX_DELAY (ждем бесконечно)
-    // portMAX_DELAY это - Я готов ждать столько, сколько потребуется. Не возвращай управление моей задаче, пока я не получу то, что жду. Тем временем ты можешь выполнять другие задачи.
-    // Используя portMAX_DELAY, вы должны быть уверены, что рано или поздно событие произойдет 
-    //    (мьютекс освободится, данные поступят в очередь). 
-    //    Иначе задача заблокируется навсегда, что может привести к "зависанию" всей системы.
-    if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE){
-      uartPort.println("Task 1: Hello from Task 1!");
-      xSemaphoreGive(xMutex); // Освобождаем мьютекс
+    if(uartPort.available()){
+      char c = uartPort.read();
+      if(c == '1'){
+        // Отправляем семафор - делаем его доступным
+        xSemaphoreGive(xBibarySemaphore);
+        uartPort.println("vSenderTask: semafore geived");
+      }
     }
-    vTaskDelay(pdMS_TO_TICKS(300)); // Ждем 300 мсек
+    // Задержка 100 мс для уменьшения нагрузки на процессор
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
-// Задача 2: отправка каждые 700 msec
-void xTask2(void *pvParam){
+// Задача-получатель (реагирует на семафор)
+void vReceiverTask(void *pdParam){
   while (1){
-    if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE){
-      uartPort.println("Task 2: Message from Task 2!");
-      xSemaphoreGive(xMutex);
+    // Пытаемся получить семафор в течение 1000 мс (макс. время ожидания)
+    // xSemaphoreTake вернет pdTRUE, если семафор получен успешно
+    if(xSemaphoreTake(xBibarySemaphore, pdMS_TO_TICKS(1000)) == pdTRUE){
+      uartPort.println("vReceiverTask: semafore taked. Switch led.");
+      digitalWrite(LED, !digitalRead(LED));
+    } else {
+      uartPort.println("vReceiverTask: timeout 1 sec");
     }
-    vTaskDelay(pdMS_TO_TICKS(700)); // Ждем 700 мсек
   }
+  
 }
 
 void setup(){
-  uartPort.begin(1200);
-
-  xMutex = xSemaphoreCreateMutex();
+  pinMode(LED, OUTPUT);
   
-  if(xMutex != NULL){
-    xTaskCreate(xTask1, "t1", 128, NULL, 1, NULL);
-    xTaskCreate(xTask2, "t2", 128, NULL, 1, NULL);
+  uartPort.begin(1200);
+  while (!uartPort){}
+
+  xBibarySemaphore = xSemaphoreCreateBinary();
+  if(xBibarySemaphore != NULL){
+    xTaskCreate(vSenderTask, "sender", 128, NULL, 1, NULL);
+    xTaskCreate(vReceiverTask, "receiver", 128, NULL, 2, NULL);
 
     vTaskStartScheduler();
-  } 
-
-  // Если планировщик не запустился, мигаем светодиодом быстро
-  pinMode(PC13, OUTPUT);
-  while(1) {
-    digitalToggle(PC13);
-    delay(100);
   }
+
+  while (1){
+    uartPort.println("err init xBibarySemaphore");
+    delay(1000);
+  }
+  
   
 }
 
