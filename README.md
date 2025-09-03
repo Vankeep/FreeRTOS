@@ -147,17 +147,17 @@ void monitorTask(void *pvParameters) {
     TaskStatus_t *taskArray = new TaskStatus_t[uxTaskGetNumberOfTasks()];
     UBaseType_t taskCount = uxTaskGetSystemState(taskArray, uxTaskGetNumberOfTasks(), NULL);
     
-    Serial.println("\n=== Memory Report ===");
+    uartPort.println("\n=== Memory Report ===");
     
     for(int i = 0; i < taskCount; i++) {
       UBaseType_t stackFree = uxTaskGetStackHighWaterMark(taskArray[i].xHandle);
-      Serial.printf("Task: %-15s Stack: %4u bytes free\n", 
+      uartPort.printf("Task: %-15s Stack: %4u bytes free\n", 
                    taskArray[i].pcTaskName, 
                    stackFree * sizeof(StackType_t));
     }
     
     // Статистика по куче
-    Serial.printf("Heap: %u bytes free\n", xPortGetFreeHeapSize());
+    uartPort.printf("Heap: %u bytes free\n", xPortGetFreeHeapSize());
     
     delete[] taskArray;
     vTaskDelay(pdMS_TO_TICKS(5000));
