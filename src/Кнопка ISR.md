@@ -1,3 +1,4 @@
+```cpp
 #include <Arduino.h>
 #include <STM32FreeRTOS.h>
 
@@ -46,3 +47,4 @@ void setup() {
 }
 
 void loop() {}
+```
